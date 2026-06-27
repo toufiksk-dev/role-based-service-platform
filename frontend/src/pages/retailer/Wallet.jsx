@@ -22,6 +22,11 @@ import {
   Clock,
   Phone,
   Zap,
+  TrendingUp,
+  Shield,
+  ChevronRight,
+  Copy,
+  Info,
 } from "lucide-react";
 import Swal from "sweetalert2";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -30,17 +35,16 @@ import { motion } from "framer-motion";
 /* ------------------ STATIC BANKS ------------------ */
 const BANKS = [
   { id: "sbi", name: "State Bank of India", qr: "/qrcode/canara.png" },
-
 ];
+
+const QUICK_AMOUNTS = [100, 200, 500, 1000];
 
 const Wallet = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  /* ------------------ STATE ------------------ */
   const [activeTab, setActiveTab] = useState("online");
-
   const [balance, setBalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState([]);
@@ -84,17 +88,10 @@ const Wallet = () => {
     if (!orderId || verifying) return;
     setVerifying(true);
     navigate("/retailer/wallet", { replace: true });
-
-    Swal.fire({
-      title: "Verifying Payment...",
-      allowOutsideClick: false,
-      didOpen: () => Swal.showLoading(),
-    });
-
+    Swal.fire({ title: "Verifying Payment...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     try {
       const { data } = await checkOrderStatus({ order_id: orderId });
       Swal.close();
-
       if (data.ok && data.order.status === "Success") {
         Swal.fire("Success", "Wallet recharged successfully", "success");
         fetchWalletBalance();
@@ -116,12 +113,9 @@ const Wallet = () => {
       Swal.fire("Invalid Amount", "Minimum ₹1 required", "warning");
       return;
     }
-
     setIsProcessing(true);
     try {
-      const { data } = await createPaymentOrderForWallet({
-        amount: rechargeAmount,
-      });
+      const { data } = await createPaymentOrderForWallet({ amount: rechargeAmount });
       window.location.href = data.payment_url;
     } catch {
       Swal.fire("Error", "Payment initiation failed", "error");
@@ -136,29 +130,16 @@ const Wallet = () => {
       Swal.fire("Invalid Amount", "Minimum amount is ₹1", "error");
       return;
     }
-
     if (!bank || !rechargeAmount || !utr || !date) {
       Swal.fire("Missing Fields", "All fields are required", "warning");
       return;
     }
-
     setIsProcessing(true);
-
     try {
-      const { data } = await submitOfflineRequest({
-        amount: rechargeAmount,
-        bank,
-        utr,
-        date,
-        mode,
-      });
-
+      const { data } = await submitOfflineRequest({ amount: rechargeAmount, bank, utr, date, mode });
       if (data.ok) {
-        Swal.fire("Offline Request Submitted", "Your payment will be verified shortly", "success");
-        setBank("");
-        setRechargeAmount("");
-        setUtr("");
-        setDate("");
+        Swal.fire("Request Submitted", "Your payment will be verified shortly", "success");
+        setBank(""); setRechargeAmount(""); setUtr(""); setDate("");
       }
     } catch (error) {
       Swal.fire("Error", error.response?.data?.message || "Submission failed", "error");
@@ -179,440 +160,511 @@ const Wallet = () => {
     }
   }, [user, location.search]);
 
-  /* ------------------ TRANSACTION DESC ------------------ */
   const getTransactionDescription = (meta) => {
     if (typeof meta === "string") return "Wallet Transaction";
     if (meta?.reason) return meta.reason;
     return "Transaction";
   };
 
-  /* ============================ UI ============================ */
+  /* ============================= UI ============================= */
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 py-8 px-4">
-      <div className="w-full mx-auto space-y-10">
+    <div className="min-h-screen bg-slate-50 font-sans">
 
-        {/* WALLET OVERVIEW */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="grid lg:grid-cols-3 gap-8"
-        >
-          <div>
-            {/* BALANCE CARD */}
-            <div className="bg-gradient-to-br max-h-60 from-blue-600 via-indigo-600 to-blue-800 text-white p-8 rounded-3xl shadow-2xl">
-              <div className="flex justify-between items-center">
-                <span className="text-sm opacity-80">Wallet Balance</span>
-                <WalletIcon />
-              </div>
-
-              {loading ? (
-                <Loader2 className="animate-spin mt-8" />
-              ) : (
-                <h1 className="text-5xl font-bold mt-6">
-                  ₹{balance.toFixed(2)}
-                </h1>
-              )}
-
-              {!loading && balance < 99 && (
-                <div className="mt-6 flex items-center gap-2 bg-yellow-400/20 text-yellow-200 px-3 py-2 rounded-lg text-xs">
-                  <AlertCircle size={16} /> Low Balance — Top up soon
-                </div>
-              )}
+      {/* ── PAGE HEADER ── */}
+      <div className="bg-white border-b border-slate-100 px-6 py-5 mb-8">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
+              <WalletIcon size={20} className="text-white" />
             </div>
-
-
-            <div className="border rounded-xl shadow-2xl bg-yellow-50 p-5 space-y-4 mt-10 md:block hidden">
-              {/* Header */}
-              <div className="flex items-center gap-2">
-                <AlertCircle className="text-yellow-600" size={20} />
-                <h3 className="font-semibold text-gray-800">
-                  Wallet Recharge Instructions
-                </h3>
-              </div>
-
-              {/* Content */}
-              <div className="space-y-4 text-sm text-gray-700">
-                {/* Online */}
-                <div>
-                  <div className="flex items-center gap-2 font-medium text-gray-800">
-                    <CheckCircle size={16} className="text-green-600" />
-                    <span>1. Online (Realtime Payment)</span>
-                  </div>
-
-                  <ul className="list-disc pl-6 mt-2 space-y-1 text-gray-600">
-                    <li>Enter the amount and click the <strong>Add Money</strong> button.</li>
-                    <li>Complete payment using UPI and wait for payment success.</li>
-                    <li>Once payment is successful, verification happens automatically.</li>
-                    <li>Wallet balance will be credited in real time.</li>
-                    <li>
-                      Do <strong>not refresh</strong> the page until payment verification is complete.
-                    </li>
-                  </ul>
-                </div>
-
-                {/* Offline */}
-                <div>
-                  <div className="flex items-center gap-2 font-medium text-gray-800">
-                    <Clock size={16} className="text-blue-600" />
-                    <span>2. Offline (Manual Verification)</span>
-                  </div>
-
-                  <ul className="list-disc pl-6 mt-2 space-y-1 text-gray-600">
-                    <li>Select a bank from the list (multiple banks available).</li>
-                    <li>The selected bank’s QR code will be shown on the right side.</li>
-                    <li>Pay using the QR code through any UPI app.</li>
-                    <li>
-                      After successful payment, enter the <strong>Amount</strong>, <strong>UTR Number</strong>,
-                      <strong> Payment Date</strong>, and <strong>Payment Mode</strong>.
-                    </li>
-                    <li>
-                      Submit the request. Our team will manually verify and credit your wallet
-                      within <strong>24 hours</strong>.
-                    </li>
-                  </ul>
-                </div>
-              </div>
-
-              {/* Support */}
-              <div className="pt-3 border-t text-sm text-gray-700 flex items-center gap-2">
-                <Phone size={16} className="text-gray-500" />
-                <span>
-                  For any query, contact our team at{" "}
-                  <a
-                    href="tel:+919919918196"
-                    className="font-semibold text-blue-600 hover:underline"
-                  >
-                    +91 9919918196
-                  </a>
-                </span>
-              </div>
+            <div>
+              <h1 className="text-lg font-bold text-slate-800 leading-tight">My Wallet</h1>
+              <p className="text-xs text-slate-400">Manage your balance & transactions</p>
             </div>
           </div>
+          <Link
+            to="/retailer/transaction"
+            className="hidden sm:flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
+          >
+            <Receipt size={15} />
+            All Transactions
+            <ChevronRight size={14} />
+          </Link>
+        </div>
+      </div>
 
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-16 space-y-8">
 
-          {/* ADD MONEY CARD */}
-          <div className="lg:col-span-2 bg-white rounded-3xl h-max shadow-lg p-8">
-            <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-              <PlusCircle className="text-blue-600" /> Add Money
-            </h2>
+        {/* ── TOP ROW ── */}
+        <div className="grid lg:grid-cols-3 gap-6">
 
-            {/* TABS */}
-            <div className="bg-gray-100 rounded-xl p-1 mb-6 flex shadow-inner">
-              {["online", "offline"].map((t) => {
-                const isActive = activeTab === t;
+          {/* ── BALANCE CARD ── */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="lg:col-span-1 flex flex-col gap-5"
+          >
+            {/* Balance */}
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 p-6 text-white shadow-xl shadow-blue-200">
+              {/* decorative circles */}
+              <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/5" />
+              <div className="absolute -bottom-8 -left-8 w-32 h-32 rounded-full bg-white/5" />
 
-                return (
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-6">
+                  <span className="text-sm font-medium text-blue-100">Available Balance</span>
+                  <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center">
+                    <TrendingUp size={16} />
+                  </div>
+                </div>
+
+                {loading ? (
+                  <div className="flex items-center gap-2 h-12">
+                    <Loader2 className="animate-spin" size={24} />
+                    <span className="text-blue-200 text-sm">Loading...</span>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-4xl font-bold tracking-tight">
+                      ₹{balance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-blue-200 text-xs mt-1">Updated just now</p>
+                  </div>
+                )}
+
+                {!loading && balance < 99 && (
+                  <div className="mt-5 flex items-center gap-2 bg-amber-400/20 border border-amber-300/30 text-amber-100 px-3 py-2.5 rounded-xl text-xs font-medium">
+                    <AlertCircle size={14} />
+                    Low balance — top up recommended
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Info Card */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4 shadow-sm">
+              <div className="flex items-center gap-2 mb-1">
+                <Info size={15} className="text-slate-400" />
+                <span className="text-sm font-semibold text-slate-700">How to Recharge</span>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex gap-3">
+                  <div className="mt-0.5 w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                    <Zap size={12} className="text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-700">Online (Instant)</p>
+                    <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                      Enter amount → Pay via UPI → Balance credited instantly.
+                      Do not refresh during verification.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <div className="mt-0.5 w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                    <Clock size={12} className="text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-700">Offline (Manual)</p>
+                    <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                      Scan bank QR → Pay → Submit UTR. Verified &amp; credited within 24 hrs.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center gap-2">
+                <Phone size={13} className="text-slate-400" />
+                <p className="text-xs text-slate-500">
+                  Support:{" "}
+                  <a href="tel:+919919918196" className="font-semibold text-blue-600 hover:underline">
+                    +91 99199 18196
+                  </a>
+                </p>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* ── ADD MONEY CARD ── */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.1 }}
+            className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
+          >
+            {/* Card Header */}
+            <div className="px-7 pt-6 pb-5 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center">
+                  <PlusCircle size={18} className="text-blue-600" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-800">Add Money to Wallet</h2>
+                  <p className="text-xs text-slate-400">Choose a payment method below</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-7">
+              {/* TABS */}
+              <div className="flex bg-slate-100 rounded-xl p-1 mb-7 gap-1">
+                {[
+                  { key: "online", label: "Online", sublabel: "Instant", icon: <Zap size={14} /> },
+                  { key: "offline", label: "Offline", sublabel: "Within 24h", icon: <Clock size={14} /> },
+                ].map(({ key, label, sublabel, icon }) => (
                   <button
-                    key={t}
-                    onClick={() => setActiveTab(t)}
-                    className={`relative flex-1 py-2.5 rounded-lg font-semibold md:text-md text-sm transition-all duration-200
-          ${isActive
-                        ? "bg-white text-blue-600 shadow-sm"
-                        : "text-gray-600 hover:text-gray-800"
+                    key={key}
+                    onClick={() => setActiveTab(key)}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200
+                      ${activeTab === key
+                        ? "bg-white text-blue-600 shadow-sm ring-1 ring-slate-200"
+                        : "text-slate-500 hover:text-slate-700"
                       }`}
                   >
-                    {/* Active Indicator */}
-                    {isActive && (
-                      <span className="absolute inset-x-0 -bottom-1 mx-auto h-1 w-10 rounded-full bg-blue-600" />
-                    )}
-
-                    {t === "online" ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <Zap size={16} />
-                        Online (Realtime)
-                      </span>
-                    ) : (
-                      <span className="flex items-center justify-center gap-2">
-                        <Clock size={16} />
-                        Offline Request
-                      </span>
-                    )}
+                    {icon}
+                    <span>{label}</span>
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                      activeTab === key ? "bg-blue-50 text-blue-500" : "bg-slate-200 text-slate-400"
+                    }`}>{sublabel}</span>
                   </button>
-                );
-              })}
-            </div>
+                ))}
+              </div>
 
-
-            {/* ONLINE */}
-            {activeTab === "online" && (
-              <form onSubmit={handleAddMoney} className="space-y-6">
-                <div className="flex gap-3">
-                  {[100, 200, 500, 1000].map((v) => (
-                    <button
-                      type="button"
-                      key={v}
-                      onClick={() => setRechargeAmount(v)}
-                      className="flex-1 py-3 border rounded-xl"
-                    >
-                      ₹{v}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="relative">
-                  <IndianRupee className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    value={rechargeAmount}
-                    onChange={(e) => setRechargeAmount(e.target.value)}
-                    className="w-full pl-12 py-4 border rounded-xl"
-                    placeholder="Enter amount"
-                  />
-                </div>
-
-                <button
-                  disabled={isProcessing}
-                  className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold"
-                >
-                  {isProcessing ? "Processing..." : "Add Money"}
-                </button>
-
-
-                
-              </form>
-              
-            )}
-
-            {/* OFFLINE */}
-            {activeTab === "offline" && (
-              <form
-                onSubmit={handleOfflineSubmit}
-                className="grid md:grid-cols-2 gap-6"
-              >
-                {/* LEFT : FORM */}
-                <div className="space-y-5">
-                  {/* Bank Select */}
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium text-gray-700">
-                      Select Bank
-                    </label>
-                    <select
-                      value={bank}
-                      onChange={(e) => setBank(e.target.value)}
-                      className="w-full p-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-yellow-400"
-
-                    >
-                      <option value="">Choose a bank</option>
-                      {BANKS.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name}
-                        </option>
+              {/* ── ONLINE FORM ── */}
+              {activeTab === "online" && (
+                <form onSubmit={handleAddMoney} className="space-y-5">
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+                      Quick Select
+                    </p>
+                    <div className="grid grid-cols-4 gap-2.5">
+                      {QUICK_AMOUNTS.map((v) => (
+                        <button
+                          type="button"
+                          key={v}
+                          onClick={() => setRechargeAmount(String(v))}
+                          className={`py-3 rounded-xl text-sm font-semibold border-2 transition-all duration-150
+                            ${String(rechargeAmount) === String(v)
+                              ? "border-blue-500 bg-blue-50 text-blue-600"
+                              : "border-slate-200 text-slate-600 hover:border-blue-300 hover:bg-blue-50/50"
+                            }`}
+                        >
+                          ₹{v}
+                        </button>
                       ))}
-                    </select>
+                    </div>
                   </div>
 
-                  {/* Amount */}
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium text-gray-700">
-                      Amount (₹)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Enter amount"
-                      value={rechargeAmount}
-                      onChange={(e) => {
-                        if (/^\d*$/.test(e.target.value)) {
-                          setRechargeAmount(e.target.value);
-                        }
-                      }}
-                      className="w-full p-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-yellow-400"
-
-                    />
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                      Or Enter Amount
+                    </p>
+                    <div className="relative">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 w-7 h-7 bg-slate-100 rounded-lg flex items-center justify-center">
+                        <IndianRupee size={14} className="text-slate-500" />
+                      </div>
+                      <input
+                        value={rechargeAmount}
+                        onChange={(e) => {
+                          if (/^\d*$/.test(e.target.value)) setRechargeAmount(e.target.value);
+                        }}
+                        className="w-full pl-14 pr-4 py-3.5 border-2 border-slate-200 rounded-xl text-slate-800 font-semibold text-base focus:outline-none focus:border-blue-400 transition-colors placeholder:font-normal placeholder:text-slate-400"
+                        placeholder="Enter custom amount"
+                      />
+                    </div>
                   </div>
 
-                  {/* UTR */}
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium text-gray-700">
-                      UTR / Transaction Reference Number
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Enter UTR number"
-                      value={utr}
-                      onChange={(e) => setUtr(e.target.value)}
-                      className="w-full p-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-yellow-400"
-
-                    />
-                  </div>
-
-                  {/* Date */}
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium text-gray-700">
-                      Payment Date
-                    </label>
-                    <input
-                      type="date"
-                      value={date}
-                      onChange={(e) => setDate(e.target.value)}
-                      className="w-full p-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-yellow-400"
-
-                    />
-                  </div>
-
-                  {/* Mode */}
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium text-gray-700">
-                      Payment Mode
-                    </label>
-                    <select
-                      value={mode}
-                      onChange={(e) => setMode(e.target.value)}
-                      className="w-full p-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                    >
-                      <option value="UPI">UPI</option>
-                      <option value="IMPS">IMPS</option>
-                      <option value="NEFT">NEFT</option>
-                    </select>
-                  </div>
-
-                  {/* Submit */}
                   <button
                     type="submit"
-                    disabled={isProcessing}
-                    className={`w-full py-4 text-white rounded-xl font-semibold transition ${
-                      isProcessing ? "bg-gray-400 cursor-not-allowed" : "bg-[#2A2185] hover:bg-blue-800"
-                    }`}
+                    disabled={isProcessing || !rechargeAmount}
+                    className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-100"
                   >
-                    {isProcessing ? "Submitting..." : "Submit Offline Payment Request"}
+                    {isProcessing ? (
+                      <><Loader2 size={16} className="animate-spin" /> Processing…</>
+                    ) : (
+                      <><Zap size={16} /> Add Money Instantly</>
+                    )}
                   </button>
-                </div>
 
-                {/* RIGHT : QR + INFO */}
-                <div className="flex flex-col items-center justify-center border rounded-xl p-6 bg-white">
-                  {selectedBank ? (
-                    <>
-                      {/* QR */}
-                      <img
-                        src={selectedBank.qr}
-                        alt="UPI QR Code"
-                        className="w-48 mb-4"
-                      />
+                  <div className="flex items-center gap-2 justify-center text-xs text-slate-400">
+                    <Shield size={12} />
+                    <span>Secured by 256-bit encryption</span>
+                  </div>
+                </form>
+              )}
 
-                      {/* Instructions */}
-                      <div className="text-center space-y-2">
-                        <p className="font-semibold text-gray-800">
-                          Scan the QR code and complete the payment
-                        </p>
+              {/* ── OFFLINE FORM ── */}
+              {activeTab === "offline" && (
+                <form onSubmit={handleOfflineSubmit} className="grid md:grid-cols-2 gap-6">
 
-                        <p className="text-sm text-gray-500">
-                          After payment, please wait up to{" "}
-                          <span className="font-medium">24 hours</span>. We will verify the
-                          transaction and credit the amount shortly.
-                        </p>
+                  {/* LEFT: FORM FIELDS */}
+                  <div className="space-y-4">
+                    {/* Bank Select */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">
+                        Bank
+                      </label>
+                      <select
+                        value={bank}
+                        onChange={(e) => setBank(e.target.value)}
+                        className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm text-slate-700 font-medium focus:outline-none focus:border-blue-400 transition-colors bg-white"
+                      >
+                        <option value="">Select a bank</option>
+                        {BANKS.map((b) => (
+                          <option key={b.id} value={b.id}>{b.name}</option>
+                        ))}
+                      </select>
+                    </div>
 
-                        {/* Support */}
-                        <p className="text-sm text-gray-600 mt-2">
-                          For any query, contact our team at <br />
-                          <a
-                            href="tel:+919919918196"
-                            className="font-semibold text-blue-600 hover:underline"
-                          >
-                            +91 9919918196
-                          </a>
-                        </p>
+                    {/* Amount */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">
+                        Amount (₹)
+                      </label>
+                      <div className="relative">
+                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-sm">₹</div>
+                        <input
+                          type="text"
+                          placeholder="0"
+                          value={rechargeAmount}
+                          onChange={(e) => {
+                            if (/^\d*$/.test(e.target.value)) setRechargeAmount(e.target.value);
+                          }}
+                          className="w-full pl-8 pr-4 py-3 border-2 border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:border-blue-400 transition-colors"
+                        />
                       </div>
+                    </div>
 
-                      {/* UPI ID */}
-                      {selectedBank.upiId && (
-                        <div className="mt-4 w-full">
-                          <p className="text-xs text-gray-500 mb-1 text-center">
-                            Or pay using UPI ID
+                    {/* UTR */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">
+                        UTR / Reference No.
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 123456789012"
+                        value={utr}
+                        onChange={(e) => setUtr(e.target.value)}
+                        className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-blue-400 transition-colors placeholder:font-normal placeholder:text-slate-400"
+                      />
+                    </div>
+
+                    {/* Date */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">
+                        Payment Date
+                      </label>
+                      <input
+                        type="date"
+                        value={date}
+                        onChange={(e) => setDate(e.target.value)}
+                        className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:border-blue-400 transition-colors"
+                      />
+                    </div>
+
+                    {/* Mode */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">
+                        Payment Mode
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {["UPI", "IMPS", "NEFT"].map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => setMode(m)}
+                            className={`py-2.5 rounded-xl text-xs font-bold border-2 transition-all
+                              ${mode === m
+                                ? "border-blue-500 bg-blue-50 text-blue-600"
+                                : "border-slate-200 text-slate-500 hover:border-blue-300"
+                              }`}
+                          >
+                            {m}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isProcessing}
+                      className="w-full py-3.5 bg-indigo-700 hover:bg-indigo-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2"
+                    >
+                      {isProcessing ? (
+                        <><Loader2 size={15} className="animate-spin" /> Submitting…</>
+                      ) : (
+                        "Submit Payment Request"
+                      )}
+                    </button>
+                  </div>
+
+                  {/* RIGHT: QR */}
+                  <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 p-6 bg-slate-50/60">
+                    {selectedBank ? (
+                      <div className="flex flex-col items-center text-center space-y-4">
+                        <div className="p-3 bg-white rounded-2xl shadow-md border border-slate-100">
+                          <img src={selectedBank.qr} alt="UPI QR" className="w-44 h-44 object-contain" />
+                        </div>
+
+                        <div>
+                          <p className="font-semibold text-slate-700 text-sm">
+                            Scan &amp; Pay via Any UPI App
                           </p>
+                          <p className="text-xs text-slate-400 mt-1">
+                            Balance credited within <span className="font-semibold text-slate-600">24 hours</span> after manual verification
+                          </p>
+                        </div>
 
-                          <div className="flex items-center justify-between border rounded-lg px-3 py-2 bg-gray-50">
-                            <span className="text-sm font-medium text-gray-700 truncate">
-                              {selectedBank.upiId}
-                            </span>
-
+                        {selectedBank.upiId && (
+                          <div className="w-full bg-white rounded-xl border border-slate-200 px-3 py-2.5 flex items-center justify-between gap-2">
+                            <div>
+                              <p className="text-[10px] text-slate-400 font-medium">UPI ID</p>
+                              <p className="text-sm font-semibold text-slate-700 truncate">{selectedBank.upiId}</p>
+                            </div>
                             <button
                               type="button"
-                              onClick={() =>
-                                navigator.clipboard.writeText(selectedBank.upiId)
-                              }
-                              className="text-xs font-semibold text-blue-600 hover:underline"
+                              onClick={() => navigator.clipboard.writeText(selectedBank.upiId)}
+                              className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 flex-shrink-0"
                             >
-                              Copy
+                              <Copy size={12} /> Copy
                             </button>
                           </div>
+                        )}
+
+                        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                          <Phone size={12} />
+                          <a href="tel:+919919918196" className="font-semibold text-blue-600 hover:underline">
+                            +91 99199 18196
+                          </a>
                         </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="text-gray-400 text-center flex flex-col items-center">
-                      <QrCode size={80} />
-                      <p className="mt-3 font-medium text-gray-600">
-                        Select a bank to view the QR code
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </form>
-
-            )}
-          </div>
-        </motion.div>
-
-        {/* 🔥 RECENT TRANSACTIONS — SAME AS BEFORE */}
-        <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-3xl shadow-lg p-8"
-        >
-          <div className="flex justify-between items-center mb-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-full">
-                <Receipt className="text-blue-600" />
-              </div>
-              <h2 className="text-xl font-bold">Recent Transactions</h2>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center text-center gap-3">
+                        <div className="w-16 h-16 rounded-2xl bg-slate-200 flex items-center justify-center">
+                          <QrCode size={30} className="text-slate-400" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-500 text-sm">QR code will appear here</p>
+                          <p className="text-xs text-slate-400 mt-1">Select a bank from the left</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </form>
+              )}
             </div>
-            <Link to="/retailer/transaction" className="text-blue-600 font-semibold">
-              View All
+          </motion.div>
+        </div>
+
+        {/* ── RECENT TRANSACTIONS ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.2 }}
+          className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
+        >
+          <div className="px-7 py-5 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-violet-50 rounded-xl flex items-center justify-center">
+                <Receipt size={16} className="text-violet-600" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-slate-800">Recent Transactions</h2>
+                <p className="text-xs text-slate-400">{transactions.length} latest entries</p>
+              </div>
+            </div>
+            <Link
+              to="/retailer/transaction"
+              className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg"
+            >
+              View All <ChevronRight size={13} />
             </Link>
           </div>
 
           {transactions.length ? (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-gray-500 text-xs">
-                  <th className="py-3 px-4 text-left">Details</th>
-                  <th className="py-3 px-4 text-right">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {transactions.map((tx) => (
-                  <tr key={tx._id} className="border-b hover:bg-gray-50">
-                    <td className="py-4 px-4">
-                      <div className="flex gap-3">
-                        {tx.type === "credit" ? (
-                          <ArrowDownCircle className="text-green-600" />
-                        ) : tx.type === "debit" ? (
-                          <ArrowUpCircle className="text-red-600" />
-                        ) : (
-                          <XCircle className="text-gray-400" />
-                        )}
-                        <div>
-                          <p className="font-medium">
-                            {getTransactionDescription(tx.meta)}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {new Date(tx.createdAt).toLocaleString()}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className={`py-4 px-4 text-right font-semibold ${tx.type === "credit" ? "text-green-600" : "text-red-600"
-                      }`}>
-                      {tx.type === "credit" ? "+" : "-"}₹{tx.amount.toFixed(2)}
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50/80">
+                    <th className="py-3 px-7 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                      Transaction
+                    </th>
+                    <th className="py-3 px-7 text-right text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                      Amount
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {transactions.map((tx, idx) => (
+                    <tr
+                      key={tx._id}
+                      className="hover:bg-slate-50/60 transition-colors"
+                    >
+                      <td className="py-4 px-7">
+                        <div className="flex items-center gap-3.5">
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                            tx.type === "credit"
+                              ? "bg-emerald-100"
+                              : tx.type === "debit"
+                              ? "bg-red-100"
+                              : "bg-slate-100"
+                          }`}>
+                            {tx.type === "credit" ? (
+                              <ArrowDownCircle size={16} className="text-emerald-600" />
+                            ) : tx.type === "debit" ? (
+                              <ArrowUpCircle size={16} className="text-red-500" />
+                            ) : (
+                              <XCircle size={16} className="text-slate-400" />
+                            )}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-slate-700 text-sm">
+                              {getTransactionDescription(tx.meta)}
+                            </p>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              {new Date(tx.createdAt).toLocaleString("en-IN", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-4 px-7 text-right">
+                        <span className={`text-sm font-bold ${
+                          tx.type === "credit" ? "text-emerald-600" : "text-red-500"
+                        }`}>
+                          {tx.type === "credit" ? "+" : "−"}₹
+                          {tx.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        </span>
+                        <p className={`text-[10px] font-medium mt-0.5 capitalize ${
+                          tx.type === "credit" ? "text-emerald-400" : "text-red-400"
+                        }`}>
+                          {tx.type}
+                        </p>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
-            <p className="text-center text-gray-400 py-10">
-              No recent transactions found
-            </p>
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mb-4">
+                <Receipt size={24} className="text-slate-300" />
+              </div>
+              <p className="font-semibold text-slate-500">No transactions yet</p>
+              <p className="text-xs text-slate-400 mt-1">Add money to get started</p>
+            </div>
           )}
         </motion.div>
+
       </div>
     </div>
   );

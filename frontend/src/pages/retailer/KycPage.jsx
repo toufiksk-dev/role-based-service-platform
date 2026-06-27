@@ -5,40 +5,72 @@ import { useNavigate } from 'react-router-dom';
 import { FileUpload } from '../../components/FileUpload';
 import { submitKyc, getMyKycDetails } from '../../api/retailer';
 import { uploadSingle } from '../../api/upload';
-import { Loader2, AlertTriangle, CheckCircle, Info, MapPin } from 'lucide-react';
+import {
+  Loader2, AlertTriangle, CheckCircle, Info, MapPin,
+  User, Building2, FileText, ShieldCheck, Clock, XCircle,
+  ChevronRight, BadgeCheck,
+} from 'lucide-react';
 import Swal from 'sweetalert2';
 
+/* ─────────────────── helpers ─────────────────── */
+const Field = ({ label, required, error, children }) => (
+  <div className="space-y-1.5">
+    <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">
+      {label} {required && <span className="text-red-500 normal-case">*</span>}
+    </label>
+    {children}
+    {error && (
+      <p className="flex items-center gap-1 text-xs text-red-500 font-medium">
+        <XCircle size={11} /> {error.message}
+      </p>
+    )}
+  </div>
+);
+
+const inputCls = (hasError) =>
+  `w-full px-4 py-2.5 border-2 rounded-xl text-sm font-medium text-slate-800 bg-white
+   focus:outline-none transition-all placeholder:font-normal placeholder:text-slate-400
+   ${hasError ? 'border-red-300 focus:border-red-400' : 'border-slate-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-50'}`;
+
+const SectionHeader = ({ icon: Icon, title, subtitle, step }) => (
+  <div className="flex items-start gap-4 mb-6">
+    <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-md shadow-blue-200">
+      {step}
+    </div>
+    <div>
+      <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+        <Icon size={16} className="text-blue-500" /> {title}
+      </h2>
+      {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
+    </div>
+  </div>
+);
+
+/* ─────────────────── component ─────────────────── */
 const KycPage = () => {
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm();
-  const [pageLoading, setPageLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pageLoading, setPageLoading]         = useState(true);
+  const [isSubmitting, setIsSubmitting]       = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
-  const [kycData, setKycData] = useState(null);
+  const [kycData, setKycData]                 = useState(null);
   const navigate = useNavigate();
 
-  // ⭐ FETCH KYC DETAILS
+  /* ── fetch KYC ── */
   useEffect(() => {
     async function fetchKycStatus() {
       try {
         const { data } = await getMyKycDetails();
         setKycData(data);
-
         const fileFields = ['aadhaarFront', 'aadhaarBack', 'panCardImage', 'photo', 'bankDocument'];
-
         if (data.details) {
-          Object.keys(data.details).forEach(key => {
-            if (!fileFields.includes(key) && key !== 'status' && key !== 'rejectionReason') {
+          Object.keys(data.details).forEach((key) => {
+            if (!fileFields.includes(key) && key !== 'status' && key !== 'rejectionReason')
               setValue(key, data.details[key]);
-            }
           });
-
-          // ⭐ Prefill Aadhaar last 4 digits
-          if (data.details?.aadhaarNumber) {
-            const last4 = data.details.aadhaarNumber.slice(-4);
-            setValue('aadhaarLast4', last4);
-          }
+          if (data.details?.aadhaarNumber)
+            setValue('aadhaarLast4', data.details.aadhaarNumber.slice(-4));
         }
-      } catch (error) {
+      } catch {
         toast.error('Failed to load your KYC status.');
       } finally {
         setPageLoading(false);
@@ -47,292 +79,314 @@ const KycPage = () => {
     fetchKycStatus();
   }, [setValue]);
 
-  // ⭐ LOCATION FETCH
+  /* ── location ── */
   const handleGetLocation = () => {
-    if (!navigator.geolocation) {
-      toast.error("Geolocation not supported.");
-      return;
-    }
+    if (!navigator.geolocation) { toast.error('Geolocation not supported.'); return; }
     setLocationLoading(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords;
+      ({ coords: { latitude, longitude } }) => {
         setValue('plusCode', `${latitude}, ${longitude}`);
         setLocationLoading(false);
-        toast.success("Location captured successfully!");
+        toast.success('Location captured!');
       },
-      () => {
-        toast.error("Unable to fetch location.");
-        setLocationLoading(false);
-      }
+      () => { toast.error('Unable to fetch location.'); setLocationLoading(false); }
     );
   };
 
-  // ⭐ SUBMIT
+  /* ── submit ── */
   const onSubmit = async (formData) => {
     setIsSubmitting(true);
-
-    Swal.fire({
-      title: 'Submitting KYC...',
-      text: 'Uploading documents...',
-      allowOutsideClick: false,
-      didOpen: () => Swal.showLoading(),
-    });
-
+    Swal.fire({ title: 'Submitting KYC…', text: 'Uploading documents…', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     try {
-      // ⭐ Build full Aadhaar number
       formData.aadhaarNumber = `XXXXXXXX${formData.aadhaarLast4}`;
-
       const payload = { ...formData };
       delete payload.aadhaarLast4;
-
       const fileFields = ['aadhaarFront', 'aadhaarBack', 'panCardImage', 'photo', 'bankDocument'];
-      const uploadPromises = [];
-
+      const uploads = [];
       for (const field of fileFields) {
         if (formData[field]?.[0]) {
-          const upload = uploadSingle(formData[field][0]).then(res => {
-            payload[field] = res.data.url;
-          });
-          uploadPromises.push(upload);
+          uploads.push(uploadSingle(formData[field][0]).then((res) => { payload[field] = res.data.url; }));
         } else {
           payload[field] = kycData?.details?.[field] || null;
         }
         if (field === 'bankDocument' && !payload[field]) delete payload[field];
       }
-
-      await Promise.all(uploadPromises);
+      await Promise.all(uploads);
       await submitKyc(payload);
-
-      Swal.fire({
-        title: 'Success!',
-        text: 'KYC submitted successfully.',
-        icon: 'success',
-        confirmButtonText: 'Go to Dashboard'
-      }).then(() => navigate('/retailer/dashboard'));
-
+      Swal.fire({ title: 'Success!', text: 'KYC submitted successfully.', icon: 'success', confirmButtonText: 'Go to Dashboard' })
+        .then(() => navigate('/retailer/dashboard'));
     } catch (error) {
-      Swal.fire({
-        title: 'Failed',
-        text: error.response?.data?.message || 'Something went wrong.',
-        icon: 'error',
-      });
+      Swal.fire({ title: 'Failed', text: error.response?.data?.message || 'Something went wrong.', icon: 'error' });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // ⭐ Loading Screen
-  if (pageLoading) {
-    return (
-      <div className="flex justify-center items-center h-screen">
-        <Loader2 className="animate-spin h-10 w-10 text-blue-600" />
+  /* ── loading ── */
+  if (pageLoading) return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 gap-3">
+      <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center shadow-xl shadow-blue-200 animate-pulse">
+        <ShieldCheck size={26} className="text-white" />
       </div>
-    );
-  }
+      <p className="text-sm font-semibold text-slate-500">Loading your KYC status…</p>
+    </div>
+  );
 
-  // ⭐ Approved
-  if (kycData?.kycStatus === 'approved') {
-    return (
-      <div className="p-6 max-w-2xl mx-auto bg-white rounded-lg shadow-md text-center mt-10">
-        <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-        <h2 className="text-2xl font-bold text-gray-800">KYC Verified</h2>
-        <p className="text-gray-600 mt-2">Your KYC is approved.</p>
+  /* ── approved ── */
+  if (kycData?.kycStatus === 'approved') return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-10 max-w-md w-full text-center">
+        <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-5">
+          <BadgeCheck size={40} className="text-emerald-500" />
+        </div>
+        <h2 className="text-2xl font-bold text-slate-800">KYC Verified</h2>
+        <p className="text-slate-500 mt-2 text-sm">Your identity has been successfully verified. You have full access to all services.</p>
+        <button onClick={() => navigate('/retailer/dashboard')} className="mt-6 inline-flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-colors">
+          Go to Dashboard <ChevronRight size={14} />
+        </button>
       </div>
-    );
-  }
+    </div>
+  );
 
-  // ⭐ Pending
-  if (kycData?.kycStatus === 'pending') {
-    return (
-      <div className="p-6 max-w-2xl mx-auto bg-white rounded-lg shadow-md text-center mt-10">
-        <Info className="h-16 w-16 text-blue-500 mx-auto mb-4" />
-        <h2 className="text-2xl font-bold text-gray-800">KYC Under Review</h2>
-        <p className="text-gray-600 mt-2">Your documents are being reviewed.</p>
+  /* ── pending ── */
+  if (kycData?.kycStatus === 'pending') return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-10 max-w-md w-full text-center">
+        <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-5">
+          <Clock size={36} className="text-blue-500" />
+        </div>
+        <h2 className="text-2xl font-bold text-slate-800">Under Review</h2>
+        <p className="text-slate-500 mt-2 text-sm">Your documents have been submitted and are currently being reviewed by our team. This usually takes 24–48 hours.</p>
+        <div className="mt-6 flex items-center justify-center gap-2 text-xs font-medium text-blue-600 bg-blue-50 px-4 py-2.5 rounded-xl">
+          <Info size={13} /> We'll notify you once the review is complete.
+        </div>
       </div>
-    );
-  }
+    </div>
+  );
 
+  /* ════════════════════════ MAIN FORM ════════════════════════ */
   return (
-    <div className="p-4 sm:p-6 bg-gray-50">
-      <div className="max-w-4xl mx-auto bg-white p-6 sm:p-8 rounded-2xl shadow-lg">
+    <div className="min-h-screen bg-slate-50 font-sans">
 
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">KYC Verification</h1>
-        <p className="text-gray-600 mb-6">Please submit valid details.</p>
+      {/* ── Page Header ── */}
+      <div className="bg-white border-b border-slate-100 px-6 py-5 mb-8">
+        <div className="max-w-4xl mx-auto flex items-center gap-3">
+          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-md shadow-blue-200">
+            <ShieldCheck size={18} className="text-white" />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-slate-800 leading-tight">KYC Verification</h1>
+            <p className="text-xs text-slate-400">Complete your Know Your Customer verification to unlock all features</p>
+          </div>
+        </div>
+      </div>
 
-        {/* Rejected Warning */}
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 pb-16 space-y-6">
+
+        {/* ── Rejection banner ── */}
         {kycData?.kycStatus === 'rejected' && (
-          <div className="bg-red-50 border-l-4 border-red-500 text-red-800 p-4 mb-6 rounded-r-lg">
-            <p className="font-bold flex items-center gap-2">
-              <AlertTriangle size={20} /> KYC Rejected
-            </p>
-            <p className="mt-1">
-              Reason: <span className="font-semibold">{kycData.details.rejectionReason}</span>
-            </p>
+          <div className="flex items-start gap-4 bg-red-50 border border-red-200 rounded-2xl p-5">
+            <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
+              <AlertTriangle size={18} className="text-red-500" />
+            </div>
+            <div>
+              <p className="font-bold text-red-700 text-sm">KYC Rejected</p>
+              <p className="text-red-600 text-xs mt-1">
+                Reason: <span className="font-semibold">{kycData.details?.rejectionReason || 'No reason provided'}</span>
+              </p>
+              <p className="text-red-500 text-xs mt-1">Please review the reason above, correct your details, and resubmit.</p>
+            </div>
           </div>
         )}
 
-        {/* FORM */}
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+        {/* ── Progress steps ── */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+          <div className="flex items-center justify-between relative">
+            <div className="absolute inset-x-0 top-4 h-px bg-slate-200 mx-12" />
+            {[
+              { label: 'Personal Info', icon: User },
+              { label: 'Address',       icon: Building2 },
+              { label: 'Documents',     icon: FileText },
+              { label: 'Submit',        icon: ShieldCheck },
+            ].map(({ label, icon: Icon }, i) => (
+              <div key={i} className="relative flex flex-col items-center gap-2 z-10">
+                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center shadow-md shadow-blue-100">
+                  <Icon size={14} className="text-white" />
+                </div>
+                <span className="text-[10px] font-semibold text-slate-500 hidden sm:block">{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
 
-          {/* Personal Info */}
-          <div className="border-b border-gray-200 pb-6">
-            <h2 className="text-xl font-semibold text-gray-700 mb-4">Personal Information</h2>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* ── Section 1: Personal Info ── */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-7">
+            <SectionHeader icon={User} title="Personal Information" subtitle="Enter your identity details exactly as they appear on official documents" step="1" />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
               {/* Outlet Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Outlet Name <span className="text-red-500">*</span>
-                </label>
+              <Field label="Outlet Name" required error={errors.outletName}>
                 <input
                   type="text"
                   {...register('outletName', { required: 'Outlet name is required' })}
-                  className="mt-1 block w-full border p-2 rounded-md"
+                  placeholder="e.g. Sharma Enterprises"
+                  className={inputCls(errors.outletName)}
                 />
-                {errors.outletName && <p className="text-red-500 text-xs">{errors.outletName.message}</p>}
-              </div>
+              </Field>
 
-              {/* ⭐ NEW MASKED AADHAAR INPUT */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Aadhaar Number <span className="text-red-500">*</span>
-                </label>
-
-                <div className="flex items-center gap-2 mt-1">
-                  <div className="px-3 py-2 bg-gray-200 rounded-md text-gray-600 font-mono">
-                    XXXX XXXX
+              {/* Aadhaar */}
+              <Field label="Aadhaar Number (Last 4 Digits)" required error={errors.aadhaarLast4}>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 px-4 py-2.5 bg-slate-100 border-2 border-slate-200 rounded-xl text-slate-500 font-mono text-sm flex-shrink-0 select-none">
+                    XXXX&nbsp;XXXX
                   </div>
-
                   <input
                     type="text"
                     maxLength={4}
                     {...register('aadhaarLast4', {
                       required: 'Enter last 4 digits',
-                      pattern: { value: /^[0-9]{4}$/, message: 'Must be 4 digits' }
+                      pattern: { value: /^[0-9]{4}$/, message: 'Must be 4 digits' },
                     })}
                     placeholder="1234"
-                    className="w-24 border p-2 rounded-md text-center"
+                    className={`${inputCls(errors.aadhaarLast4)} w-24 text-center font-mono tracking-widest`}
                   />
                 </div>
-
-                {errors.aadhaarLast4 && (
-                  <p className="text-red-500 text-xs">{errors.aadhaarLast4.message}</p>
-                )}
-              </div>
+              </Field>
 
               {/* PAN */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  PAN Number <span className="text-red-500">*</span>
-                </label>
-
+              <Field label="PAN Number" required error={errors.panNumber}>
                 <input
                   type="text"
-                  maxLength={10}     // ⭐ allow 10 characters freely
-                  {...register('panNumber', {
-                    required: 'PAN is required',
-                    // validate: value => {
-                    //   const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
-                    //   return panRegex.test(value.toUpperCase()) || "Invalid PAN format";
-                    // }
-                  })}
-                  onInput={(e) => e.target.value = e.target.value.toUpperCase()} // ⭐ auto uppercase
-                  className="mt-1 block w-full border p-2 rounded-md uppercase"
+                  maxLength={10}
+                  {...register('panNumber', { required: 'PAN is required' })}
+                  onInput={(e) => (e.target.value = e.target.value.toUpperCase())}
                   placeholder="ABCDE1234F"
+                  className={`${inputCls(errors.panNumber)} uppercase tracking-widest font-mono`}
                 />
-
-                {errors.panNumber && (
-                  <p className="text-red-500 text-xs">{errors.panNumber.message}</p>
-                )}
-              </div>
-
+              </Field>
 
             </div>
           </div>
 
-          {/* Address Section */}
-          <div className="border-b border-gray-200 pb-6">
-            <h2 className="text-xl font-semibold text-gray-700 mb-4">Outlet Address</h2>
+          {/* ── Section 2: Address ── */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-7">
+            <SectionHeader icon={Building2} title="Outlet Address" subtitle="Provide your registered outlet address for verification" step="2" />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+              <Field label="State" required error={errors.state}>
+                <input type="text" {...register('state', { required: 'State is required' })} placeholder="e.g. Uttar Pradesh" className={inputCls(errors.state)} />
+              </Field>
+
+              <Field label="District" required error={errors.district}>
+                <input type="text" {...register('district', { required: 'District is required' })} placeholder="e.g. Lucknow" className={inputCls(errors.district)} />
+              </Field>
+
+              <Field label="Post Office" required error={errors.postOffice}>
+                <input type="text" {...register('postOffice', { required: 'Post Office is required' })} placeholder="e.g. Hazratganj" className={inputCls(errors.postOffice)} />
+              </Field>
+
+              <Field label="PIN Code" required error={errors.pinCode}>
+                <input
+                  type="text"
+                  {...register('pinCode', {
+                    required: 'PIN is required',
+                    pattern: { value: /^\d{6}$/, message: 'Must be 6 digits' },
+                  })}
+                  placeholder="226001"
+                  className={`${inputCls(errors.pinCode)} tracking-widest font-mono`}
+                  maxLength={6}
+                />
+              </Field>
+
+              <div className="md:col-span-2">
+                <Field label="Full Address" required error={errors.address}>
+                  <textarea
+                    {...register('address', { required: 'Address is required' })}
+                    rows={3}
+                    placeholder="House/Shop no., Street, Locality, City…"
+                    className={`${inputCls(errors.address)} resize-none`}
+                  />
+                </Field>
+              </div>
+
+              <div className="md:col-span-2">
+                <Field label="Live Location (GPS Coordinates)" required error={errors.plusCode}>
+                  <div className="flex items-center gap-2">
+                    <input
+                      readOnly
+                      {...register('plusCode', { required: 'Location is required' })}
+                      placeholder="Click the button to capture your location"
+                      className={`${inputCls(errors.plusCode)} bg-slate-50 flex-1 cursor-not-allowed`}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleGetLocation}
+                      disabled={locationLoading}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white rounded-xl text-sm font-semibold transition-colors flex-shrink-0"
+                    >
+                      {locationLoading
+                        ? <Loader2 size={15} className="animate-spin" />
+                        : <MapPin size={15} />}
+                      <span className="hidden sm:inline">{locationLoading ? 'Fetching…' : 'Capture'}</span>
+                    </button>
+                  </div>
+                </Field>
+              </div>
+
+            </div>
+          </div>
+
+          {/* ── Section 3: Documents ── */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-7">
+            <SectionHeader icon={FileText} title="Document Upload" subtitle="Upload clear, legible photos or scans of each required document" step="3" />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-              {/* State */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700">State *</label>
-                <input type="text" {...register('state', { required: 'State required' })} className="mt-1 block w-full border p-2 rounded-md" />
-                {errors.state && <p className="text-red-500 text-xs">{errors.state.message}</p>}
-              </div>
-
-              {/* District */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700">District *</label>
-                <input type="text" {...register('district', { required: 'District required' })} className="mt-1 block w-full border p-2 rounded-md" />
-                {errors.district && <p className="text-red-500 text-xs">{errors.district.message}</p>}
-              </div>
-
-              {/* Post Office */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Post Office *</label>
-                <input type="text" {...register('postOffice', { required: 'Post Office required' })} className="mt-1 block w-full border p-2 rounded-md" />
-                {errors.postOffice && <p className="text-red-500 text-xs">{errors.postOffice.message}</p>}
-              </div>
-
-              {/* PIN */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700">PIN Code *</label>
-                <input
-                  type="text"
-                  {...register('pinCode', { required: 'PIN required', pattern: { value: /^\d{6}$/, message: 'Must be 6 digits' } })}
-                  className="mt-1 block w-full border p-2 rounded-md"
-                />
-                {errors.pinCode && <p className="text-red-500 text-xs">{errors.pinCode.message}</p>}
-              </div>
-
-              {/* Full Address */}
+              <FileUpload label="Aadhaar Front" name="aadhaarFront" register={register} error={errors.aadhaarFront} watch={watch} setValue={setValue} required={!kycData?.details?.aadhaarFront} existingFileUrl={kycData?.details?.aadhaarFront} />
+              <FileUpload label="Aadhaar Back" name="aadhaarBack" register={register} error={errors.aadhaarBack} watch={watch} setValue={setValue} required={!kycData?.details?.aadhaarBack} existingFileUrl={kycData?.details?.aadhaarBack} />
+              <FileUpload label="PAN Card" name="panCardImage" register={register} error={errors.panCardImage} watch={watch} setValue={setValue} required={!kycData?.details?.panCardImage} existingFileUrl={kycData?.details?.panCardImage} />
+              <FileUpload label="Your Passport Photo" name="photo" register={register} error={errors.photo} watch={watch} setValue={setValue} required={!kycData?.details?.photo} existingFileUrl={kycData?.details?.photo} />
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">Full Address *</label>
-                <textarea {...register('address', { required: 'Address required' })} className="mt-1 block w-full border p-2 rounded-md" rows={3}></textarea>
-                {errors.address && <p className="text-red-500 text-xs">{errors.address.message}</p>}
+                <FileUpload label="Shop Photo (Optional)" name="bankDocument" register={register} error={errors.bankDocument} watch={watch} setValue={setValue} existingFileUrl={kycData?.details?.bankDocument} />
               </div>
+            </div>
 
-              {/* Live Location */}
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">Live Location (Plus Code) *</label>
-                <div className="flex items-center gap-2 mt-1">
-                  <input readOnly {...register('plusCode', { required: 'Location required' })} className="w-full border p-2 rounded-md bg-gray-100" />
-                  <button
-                    type="button"
-                    onClick={handleGetLocation}
-                    disabled={locationLoading}
-                    className="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg"
-                  >
-                    {locationLoading ? <Loader2 className="animate-spin" size={16} /> : <MapPin size={16} />}
-                  </button>
-                </div>
-                {errors.plusCode && <p className="text-red-500 text-xs">{errors.plusCode.message}</p>}
+            {/* Upload tips */}
+            <div className="mt-6 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <Info size={15} className="text-amber-500 flex-shrink-0 mt-0.5" />
+              <div className="text-xs text-amber-700 space-y-0.5">
+                <p className="font-semibold">Upload Guidelines</p>
+                <p>• Files must be JPG, PNG, or PDF · Max size 5 MB each</p>
+                <p>• Ensure all text is clearly readable and the image is not blurry</p>
+                <p>• Do not upload password-protected files</p>
               </div>
-
             </div>
           </div>
 
-          {/* FILE UPLOADS */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <FileUpload label="Aadhaar Front Page" name="aadhaarFront" register={register} error={errors.aadhaarFront} watch={watch} setValue={setValue} required={!kycData?.details?.aadhaarFront} existingFileUrl={kycData?.details?.aadhaarFront} />
+          {/* ── Submit ── */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-7">
+            <SectionHeader icon={ShieldCheck} title="Review & Submit" subtitle="By submitting, you confirm all provided information is accurate and genuine" step="4" />
 
-            <FileUpload label="Aadhaar Back Page" name="aadhaarBack" register={register} error={errors.aadhaarBack} watch={watch} setValue={setValue} required={!kycData?.details?.aadhaarBack} existingFileUrl={kycData?.details?.aadhaarBack} />
+            <div className="flex items-start gap-3 bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6">
+              <CheckCircle size={15} className="text-blue-500 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-blue-700">
+                Your data is encrypted and stored securely. It will only be used for identity verification purposes as per our Privacy Policy.
+              </p>
+            </div>
 
-            <FileUpload label="PAN Card Image" name="panCardImage" register={register} error={errors.panCardImage} watch={watch} setValue={setValue} required={!kycData?.details?.panCardImage} existingFileUrl={kycData?.details?.panCardImage} />
-
-            <FileUpload label="Your Photo" name="photo" register={register} error={errors.photo} watch={watch} setValue={setValue} required={!kycData?.details?.photo} existingFileUrl={kycData?.details?.photo} />
-
-            <FileUpload label="Shop Photo" name="bankDocument" register={register} error={errors.bankDocument} watch={watch} setValue={setValue} existingFileUrl={kycData?.details?.bankDocument} />
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-100"
+            >
+              {isSubmitting
+                ? <><Loader2 size={16} className="animate-spin" /> Submitting your KYC…</>
+                : <><ShieldCheck size={16} /> Submit for Verification</>}
+            </button>
           </div>
-
-          <button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 text-white py-3 rounded-lg">
-            {isSubmitting ? <Loader2 className="animate-spin" /> : "Submit for Verification"}
-          </button>
 
         </form>
       </div>

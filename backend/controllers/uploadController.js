@@ -15,7 +15,7 @@ export const uploadImage = multer({
     s3: s3,
     bucket: process.env.S3_BUCKET,
     key: (req, file, cb) => {
-      cb(null, `uploads/${Date.now()}-${file.originalname}`);
+      cb(null, `impay/${Date.now()}-${file.originalname}`);
     },
   }),
 });
